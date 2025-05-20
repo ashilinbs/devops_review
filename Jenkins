@@ -2,22 +2,19 @@ pipeline {
     agent any
 
     environment {
-        NODEJS_HOME = tool 'nodejs-23'   // Node.js installation in Jenkins
+        NODEJS_HOME = tool 'nodejs-23'
         PATH = "${NODEJS_HOME}/bin:${env.PATH}"
-        IMAGE_NAME = "signup"            // Docker image name
-        CONTAINER_NAME = "signup"        // Docker container name
-        TERRAFORM_VERSION = "1.3.5"
-        AWS_REGION = "us-east-1"
-        ECR_REPO = "307946674949.dkr.ecr.us-east-1.amazonaws.com/signup-repo"
+        IMAGE_NAME = "signup"
+        CONTAINER_NAME = "signup"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout from Master') {
             steps {
                 script {
                     sh """
                     rm -rf Devops_Training
-                    git clone https://github.com/VIBUDESH07/Devops_Training.git
+                    git clone --branch master https://github.com/VIBUDESH07/Devops_Training.git
                     """
                 }
             }
@@ -31,7 +28,7 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build App') {
             steps {
                 dir('Devops_Training/Devops') {
                     sh 'npm run build'
@@ -39,31 +36,21 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker Image to ECR') {
+        stage('Build Docker Image') {
             steps {
-                withCredentials([string(credentialsId: 'DOCKER_PASS', variable: 'DOCKER_PASSWORD')]) {
-                    script {
-                        sh """
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
-                        cd Devops_Training/Devops
-                        docker build -t ${IMAGE_NAME} .
-                        docker tag ${IMAGE_NAME}:latest ${ECR_REPO}:latest
-                        docker push ${ECR_REPO}:latest
-                        """
-                    }
+                dir('Devops_Training/Devops') {
+                    sh "docker build -t ${IMAGE_NAME} ."
                 }
             }
         }
 
-        stage('Deploy Container to ECS') {
+        stage('Run Docker Container (No Port Exposure)') {
             steps {
                 script {
-                    dir('Devops_Training/terraform') {
-                        sh '''
-                        terraform init
-                        terraform apply -auto-approve
-                        '''
-                    }
+                    sh """
+                    docker rm -f ${CONTAINER_NAME} || true
+                    docker run -d --name ${CONTAINER_NAME} ${IMAGE_NAME}
+                    """
                 }
             }
         }
