@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+
+    environment {
+        NODEJS_HOME = tool 'nodejs-23'   // Node.js installation in Jenkins
+        PATH = "${NODEJS_HOME}/bin:${env.PATH}"
+        IMAGE_NAME = "signup"            // Docker image name
+        CONTAINER_NAME = "signup"        // Docker container name
+        TERRAFORM_VERSION = "1.3.5"
+        AWS_REGION = "us-east-1"
+        ECR_REPO = "307946674949.dkr.ecr.us-east-1.amazonaws.com/signup-repo"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    sh """
+                    rm -rf Devops_Training
+                    git clone https://github.com/VIBUDESH07/Devops_Training.git
+                    """
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir('Devops_Training/Devops') {
+                    sh 'npm install'
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir('Devops_Training/Devops') {
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Build & Push Docker Image to ECR') {
+            steps {
+                withCredentials([string(credentialsId: 'DOCKER_PASS', variable: 'DOCKER_PASSWORD')]) {
+                    script {
+                        sh """
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
+                        cd Devops_Training/Devops
+                        docker build -t ${IMAGE_NAME} .
+                        docker tag ${IMAGE_NAME}:latest ${ECR_REPO}:latest
+                        docker push ${ECR_REPO}:latest
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Container to ECS') {
+            steps {
+                script {
+                    dir('Devops_Training/terraform') {
+                        sh '''
+                        terraform init
+                        terraform apply -auto-approve
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}
