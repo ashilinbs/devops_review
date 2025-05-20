@@ -38,10 +38,11 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-               dir('Devops_Training/Devops') {
+               dir('Devops') {
   sh "ls"
     sh "docker build -t signup ."
 }
+
 
             }
         }
